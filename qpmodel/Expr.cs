@@ -146,7 +146,20 @@ namespace qpmodel.expr
     // TBD: make it per query
     public class ExprSearch
     {
-        public static Dictionary<string, Expr> table_ = new Dictionary<string, Expr>();
+        [ThreadStatic]
+        public static Dictionary<string, Expr> table_;
+        //public static Dictionary<string, Expr> table_ = new Dictionary<string, Expr>();
+        public static Dictionary<string, Expr> Table
+        {
+            get
+            {
+                if (table_ == null)
+                {
+                    table_ = new Dictionary<string, Expr>();
+                }
+                return table_;
+            }
+        }
 
         public static Expr Locate(string objectid) => table_[objectid];
     }
@@ -789,7 +802,7 @@ namespace qpmodel.expr
             validateAfterBound();
 
             // register the expression in the search table
-            ExprSearch.table_.Add(_, this);
+            ExprSearch.Table.Add(_, this);
         }
 
         public virtual void Bind(BindContext context)

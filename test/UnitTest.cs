@@ -27,6 +27,7 @@
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Threading;
 using System.Linq;
 using System.IO;
 using System.Collections.Generic;
@@ -44,6 +45,11 @@ using qpmodel.dml;
 using psql;
 
 using statistics_fmt_cvnt;
+
+#if (true)
+[assembly: Parallelize(Workers = 0, Scope = ExecutionScope.ClassLevel)] //0 means use as many workers as possible
+#endif
+
 
 namespace test
 {
@@ -193,7 +199,7 @@ namespace test
     }
 
     [TestClass]
-    public class TpcTest
+    public class TpcTest_Jobench
     {
         [TestMethod]
         public void TestJobench()
@@ -205,13 +211,20 @@ namespace test
             // make sure all queries can generate phase one opt plan
             QueryOption option = new QueryOption();
             option.optimize_.TurnOnAllOptimizations();
+            int my_i = 0;
             foreach (var v in files)
             {
                 var sql = File.ReadAllText(v);
                 var result = TU.ExecuteSQL(sql, out string phyplan, option);
                 Assert.IsNotNull(phyplan); Assert.IsNotNull(result);
+                my_i++;
             }
         }
+    }
+
+    [TestClass]
+    public class TpcTest_Benchmark
+    {
 
         [TestMethod]
         public void TestBenchmarks()
@@ -811,8 +824,9 @@ namespace test
             sql = "select a1,a1,a3,a3, (select b3 from b where a1=b2 and b2=3) from a where a1>1"; TU.ExecuteSQL(sql, "2,2,4,4,");
 
             // scalar subquery
-            sql = "select a1, a3  from a where a.a1 = (select b1 from b where b2 = 3)";
-            result = ExecuteSQL(sql); Assert.AreEqual("2,4", string.Join(";", result));
+            sql = "select a1, a3  from a where a.a1 = (select b1 from b where b2 = 3)"; TU.ExecuteSQL(sql, "2,4");
+            //result = ExecuteSQL(sql); Assert.AreEqual("2,4", string.Join(";", result));
+
             sql = "select a1, a3  from a where a.a1 = (select b1 from b where b2 = 4)";
             result = ExecuteSQL(sql); Assert.AreEqual(0, result.Count);
 
@@ -827,22 +841,32 @@ namespace test
             sql = "select a1 from a where a.a1 = (select b1 from b bo where b2 = a2 and b1 = (select b1 from b where b3 = a3 and b3>1) and b2<4);"; TU.ExecuteSQL(sql, "0;1;2");
             // test4: deep/ref 2+ outside vars
             sql = "select a1,a2,a3  from a where a.a1 = (select b1 from b bo where b2 = a2 and b1 = (select b1 from b where b3=a3 and bo.b3 = a3 and b3> 1) and b3<4);";
-            result = ExecuteSQL(sql); Assert.AreEqual("0,1,2;1,2,3", string.Join(";", result));
+            TU.ExecuteSQL(sql, "0,1,2;1,2,3");
+            //result = ExecuteSQL(sql); Assert.AreEqual("0,1,2;1,2,3", string.Join(";", result));
+
             sql = @" select a1+a2+a3  from a where a.a1 = (select b1 from b bo where b4 = a4 and b1 = (select b1 from b where b3=a3 and bo.b3 = a3 and b3> 2) and b3<5)
             and a.a2 = (select b2 from b bo where b1 = a1 and b2 >= (select b2 from b where b3=a3 and bo.b3 = a3 and b3> 1) and b3<4);";
-            result = ExecuteSQL(sql); Assert.AreEqual("6", string.Join(";", result));
+            TU.ExecuteSQL(sql, "6");
+            //result = ExecuteSQL(sql); Assert.AreEqual("6", string.Join(";", result));
+
             sql = @"select a4  from a where a.a1 = (select b1 from (select b_2.b1, b_1.b2, b_1.b3 from b b_1, b b_2) bo where b2 = a2
             and b1 = (select b1 from b where b3=a3 and bo.b3 = a3 and b3> 1) and b2<5)
             and a.a2 = (select b2 from b bo where b1 = a1 and b2 = (select b2 from b where b3=a3 and bo.b3 = a3 and b3> 0) and b3<5);";
-            result = ExecuteSQL(sql); Assert.AreEqual("3;4;5", string.Join(";", result));
+            TU.ExecuteSQL(sql, "3;4;5");
+            //result = ExecuteSQL(sql); Assert.AreEqual("3;4;5", string.Join(";", result));
+
             sql = @"select a1 from a, b where a1=b1 and a.a1 = (select b1 from(select b_2.b1, b_1.b2, b_1.b3 from b b_1, b b_2) bo where b2 = a2 
             and b1 = (select b1 from b where b3 = a3 and bo.b3 = a3 and b3> 1) and b2<5)
             and a.a2 = (select b2 from b bo where b1 = a1 and b2 = (select b2 from b where b4 = a3 + 1 and bo.b3 = a3 and b3> 0) and b3<5);";
-            result = ExecuteSQL(sql); Assert.AreEqual("0;1;2", string.Join(";", result));
+            TU.ExecuteSQL(sql, "0;1;2");
+            //result = ExecuteSQL(sql); Assert.AreEqual("0;1;2", string.Join(";", result));
+
             sql = @"select a1 from c,a, b where a1=b1 and b2=c2 and a.a1 = (select b1 from(select b_2.b1, b_1.b2, b_1.b3 from b b_1, b b_2) bo where b2 = a2 
             and b1 = (select b1 from b where b3 = a3 and bo.b3 = c3 and b3> 1) and b2<5)
             and a.a2 = (select b2 from b bo where b1 = a1 and b2 = (select b2 from b where b4 = a3 + 1 and bo.b3 = a3 and b3> 0) and c3<5);";
-            result = ExecuteSQL(sql); Assert.AreEqual("0;1;2", string.Join(";", result));
+            TU.ExecuteSQL(sql, "0;1;2");
+            //result = ExecuteSQL(sql); Assert.AreEqual("0;1;2", string.Join(";", result));
+
             sql = "select b3+c2 from a, b, c where (select b1+b2 from b where b1=a1)>4 and (select c2+c3 from c where c1=b1)>6 and c1<1"; TU.ExecuteSQL(sql, "5");
 
             // in-list and in-subquery
