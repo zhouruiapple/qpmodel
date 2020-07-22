@@ -482,8 +482,8 @@ namespace qpmodel.optimizer
         // list0 - no required property on members
         // list1 - required property supplied by members
         internal void CalculateMemberCosts(PhysicProperty required, CGroupMember member,
-            ref List<Tuple<CGroupMember, double>> supplied,
-            ref List<Tuple<CGroupMember, double>> nullprop)
+            List<Tuple<CGroupMember, double>> supplied,
+            List<Tuple<CGroupMember, double>> nullprop)
         {
             var physic = member.physic_;
             var propagated = required?.IsPropertyPropagated(physic) ?? false;
@@ -608,7 +608,7 @@ namespace qpmodel.optimizer
                             childgroup.CalculateMinInclusiveCostMember(required, physic);
                         }
 
-                        CalculateMemberCosts(required, exprList_[i], ref supplied, ref nullprop);
+                        CalculateMemberCosts(required, exprList_[i], supplied, nullprop);
                     }
                 }
 
